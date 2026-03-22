@@ -1,0 +1,26 @@
+{
+  "anxiety": {
+    "body_state": "tight chest, fast breathing",
+    "action": "Inhale for 4 seconds, hold for 2, exhale for 6 seconds. Repeat 5 times."
+  },
+  "anger": {
+    "body_state": "jaw tension, hot face, clenched hands",
+    "action": "Stomp your feet slowly 10 times. Then take 3 long slow exhales."
+  },
+  "sadness": {
+    "body_state": "heavy chest, low energy, slow body",
+    "action": "Place one hand on your chest. Breathe slowly and feel the warmth for 1 minute."
+  },
+  "freeze": {
+    "body_state": "numbness, inability to move, disconnected feeling",
+    "action": "Stand up and shake your body gently for 20 seconds. Then exhale slowly 5 times."
+  },
+  "neutral": {
+    "body_state": "calm, balanced",
+    "action": "Take 3 slow breaths. You are grounded right now."
+  },
+  "critical": {
+    "body_state": "high distress",
+    "action": "You are not alone. Please consider reaching out to a trusted person or a local helpline immediately."
+  }
+}
