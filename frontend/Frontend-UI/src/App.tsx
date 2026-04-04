@@ -1,13 +1,28 @@
 import { useState } from "react";
 
-// ─── TypeScript Types (unchanged) ───────────────────────────────────────────
+// ─── TypeScript Types ───────────────────────────────────────────
 type ApiResponse = {
   emotion: string;
-  body_state: string;
-  action: string;
+  body_state?: string;
+  action?: string;
+  intensity?: "high" | "low";
+  mode?: "guided" | "normal" | "companion";
+  steps?: string[];
+  messages?: string[];
+  insight_hint?: string;
+  pre_trigger_alert?: string | null;
 };
 
-// ─── Helper: Result Row ───────────────────────────────────────────────────────
+type InsightsResponse = {
+  total_entries: number;
+  dominant_emotion: string;
+  emotion_breakdown: Record<string, number>;
+  insight: string;
+  time_patterns: Record<string, number>;
+  prediction: string;
+};
+
+// ─── Component: Result Row ──────────────────────────────────────
 function ResultRow({
   icon,
   label,
@@ -30,6 +45,178 @@ function ResultRow({
   );
 }
 
+// ─── Component: Guided Mode View ────────────────────────────────
+function GuidedModeView({ result, onReset }: { result: ApiResponse, onReset: () => void }) {
+  const [stepIndex, setStepIndex] = useState(0);
+  const steps = result.steps || [];
+
+  if (steps.length === 0) return null;
+
+  return (
+    <div className="backdrop-blur-xl bg-purple-900/40 border border-purple-500/30 rounded-2xl p-6 shadow-2xl shadow-purple-900/20 flex flex-col gap-4 animate-fade-in relative overflow-hidden">
+      <div className="absolute top-0 right-0 px-3 py-1 bg-purple-500/20 text-purple-200 text-[10px] font-bold uppercase tracking-widest rounded-bl-lg">
+        Guided Mode Active • High Intensity
+      </div>
+
+      <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-1 mt-2">
+        Step {stepIndex + 1} of {steps.length}
+      </p>
+      
+      <div className="flex flex-col items-center text-center gap-4 py-8">
+        <p className="text-2xl font-medium text-white/90 leading-relaxed">
+          {steps[stepIndex]}
+        </p>
+      </div>
+
+      <div className="flex justify-between items-center mt-2">
+        <div className="flex gap-2">
+          {steps.map((_, i) => (
+            <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === stepIndex ? "w-6 bg-purple-400" : "w-1.5 bg-white/20"}`} />
+          ))}
+        </div>
+        
+        {stepIndex < steps.length - 1 ? (
+          <button 
+            onClick={() => setStepIndex(s => s + 1)}
+            className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors"
+          >
+            Next Step →
+          </button>
+        ) : (
+          <button 
+            onClick={onReset}
+            className="px-5 py-2 rounded-lg bg-purple-500 hover:bg-purple-400 text-white text-sm font-medium transition-colors shadow-lg shadow-purple-500/20"
+          >
+            Finish
+          </button>
+        )}
+      </div>
+
+      {result.insight_hint && (
+        <div className="mt-2 text-center text-purple-200/80 italic text-[11px] border-t border-purple-500/20 pt-3">
+          💡 {result.insight_hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Component: Companion Mode View ──────────────────────────────
+function CompanionModeView({ result, onReset }: { result: ApiResponse, onReset: () => void }) {
+  const [stepIndex, setStepIndex] = useState(0);
+  const messages = result.messages || [];
+
+  if (messages.length === 0) return null;
+
+  return (
+    <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/50 rounded-2xl p-8 shadow-2xl flex flex-col gap-6 animate-fade-in relative min-h-[300px] justify-center text-center transition-all duration-700">
+      
+      {/* Decorative calm background glow */}
+      <div className="absolute inset-0 bg-blue-500/5 blur-[100px] pointer-events-none rounded-2xl"></div>
+
+      <div className="flex justify-center items-center mb-2">
+        <span className="bg-blue-500/20 text-blue-300 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest flex items-center gap-2 border border-blue-500/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+          Companion Mode
+        </span>
+      </div>
+
+      <p className="text-2xl sm:text-3xl font-light text-white/90 leading-relaxed tracking-wide animate-fade-in-up transition-opacity duration-1000" key={stepIndex}>
+        {messages[stepIndex]}
+      </p>
+
+      <div className="absolute bottom-6 left-0 w-full flex flex-col items-center gap-4">
+        {stepIndex < messages.length - 1 ? (
+          <button 
+            onClick={() => setStepIndex(s => s + 1)}
+            className="px-6 py-2.5 rounded-full bg-white/5 hover:bg-white/10 text-white/70 text-sm font-medium transition-colors border border-white/10"
+          >
+            Next
+          </button>
+        ) : (
+          <button 
+            onClick={onReset}
+            className="px-8 py-2.5 rounded-full bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 text-blue-200 text-sm font-medium transition-colors shadow-lg shadow-blue-500/10"
+          >
+            Continue
+          </button>
+        )}
+        
+        {/* Subtle dot pagination indicator */}
+        <div className="flex gap-2 mt-2">
+          {messages.map((_, i) => (
+            <div key={i} className={`h-1 rounded-full transition-all duration-500 ${i === stepIndex ? "w-4 bg-blue-400/80" : "w-1 bg-white/20"}`} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Component: Insights View ───────────────────────────────────
+function InsightsView() {
+  const [data, setData] = useState<InsightsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [show, setShow] = useState(false);
+
+  const fetchInsights = async () => {
+    if (show) {
+      setShow(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("http://127.0.0.1:5000/insights");
+      const d = await res.json();
+      setData(d);
+      setShow(true);
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mt-8 flex flex-col items-center">
+      <button 
+        onClick={fetchInsights}
+        className="text-white/50 hover:text-white/80 transition-colors text-sm underline underline-offset-4 decoration-white/20 mb-4"
+      >
+        {show ? "Hide My Patterns" : "View My Patterns"}
+      </button>
+
+      {loading && <p className="text-white/40 text-sm mb-4">Loading patterns...</p>}
+      
+      {show && data && (
+        <div className="w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 shadow-xl animate-fade-in flex flex-col gap-4">
+          <h3 className="text-white/70 font-semibold uppercase tracking-widest text-xs">Your Emotional Patterns</h3>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white/5 rounded-xl p-4 flex flex-col gap-1 border border-white/5">
+              <span className="text-white/40 text-xs text-center">Total Logs</span>
+              <span className="text-white/90 text-2xl font-light text-center">{data.total_entries}</span>
+            </div>
+            <div className="bg-white/5 rounded-xl p-4 flex flex-col gap-1 border border-white/5">
+              <span className="text-white/40 text-xs text-center">Dominant State</span>
+              <span className="text-white/90 text-xl font-medium capitalize text-purple-300 text-center">{data.dominant_emotion}</span>
+            </div>
+          </div>
+          
+          <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 mt-2">
+            <p className="text-purple-200 text-sm italic text-center">"{data.insight}"</p>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col items-center text-center gap-1 mt-1">
+            <span className="text-white/40 text-xs font-semibold uppercase tracking-widest">Time Pattern</span>
+            <span className="text-white/90 text-sm">{data.prediction}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main App ────────────────────────────────────────────────────────────────
 function App() {
   const [message, setMessage] = useState<string>("");
@@ -37,7 +224,6 @@ function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
 
-  // API call logic — unchanged
   const handleAnalyze = async () => {
     if (!message.trim()) {
       setError("Please describe how you're feeling first.");
@@ -71,7 +257,6 @@ function App() {
     }
   };
 
-  // Allow Ctrl+Enter / Cmd+Enter to submit
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       handleAnalyze();
@@ -79,20 +264,17 @@ function App() {
   };
 
   return (
-    // ── Full-screen gradient background ──────────────────────────────────────
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen w-full bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] flex items-center justify-center px-4 py-12 relative overflow-y-auto">
 
-      {/* Ambient glow blobs for depth */}
+      {/* Ambient glow blobs */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-purple-700/20 blur-3xl" />
         <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-blue-700/20 blur-3xl" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-900/10 blur-3xl" />
       </div>
 
-      {/* ── Centered content container ──────────────────────────────────── */}
-      <div className="relative z-10 w-full max-w-xl flex flex-col gap-6">
+      <div className="relative z-10 w-full max-w-xl flex flex-col gap-6 my-auto">
 
-        {/* ── App Title ──────────────────────────────────────────────────── */}
         <div className="text-center">
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-r from-purple-300 via-fuchsia-200 to-blue-300 bg-clip-text text-transparent mb-2">
             InnerEase AI
@@ -102,7 +284,6 @@ function App() {
           </p>
         </div>
 
-        {/* ── Input Glass Card ────────────────────────────────────────────── */}
         <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl p-6 shadow-2xl shadow-black/30 transition-all duration-300">
           <label className="block text-white/60 text-xs font-semibold uppercase tracking-widest mb-3">
             How are you feeling right now?
@@ -112,7 +293,7 @@ function App() {
             id="feeling-input"
             className="w-full resize-none rounded-xl bg-white/5 border border-white/10 text-white/90 placeholder-white/25 p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-purple-500/60 focus:border-purple-500/40 transition-all duration-200"
             rows={4}
-            placeholder="Describe what's happening in your body and mind… e.g. 'I feel tightness in my chest and my thoughts are racing.'"
+            placeholder="Describe what's happening in your body and mind…"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -130,35 +311,16 @@ function App() {
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <svg
-                  className="animate-spin h-4 w-4 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"
-                  />
+                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
                 Analyzing…
               </span>
-            ) : (
-              "✦ Analyze My State"
-            )}
+            ) : "✦ Analyze My State"}
           </button>
         </div>
 
-        {/* ── Error Message ───────────────────────────────────────────────── */}
         {error && (
           <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 border border-red-400/20 text-red-300 text-sm transition-all duration-300">
             <span>⚠️</span>
@@ -166,35 +328,44 @@ function App() {
           </div>
         )}
 
-        {/* ── Result Glass Card ─────────────────────────────────────────────
-            Appears only when a response has been received.
-        ────────────────────────────────────────────────────────────────────── */}
-        {result && (
-          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl p-6 shadow-2xl shadow-black/30 flex flex-col gap-3 transition-all duration-500 animate-fade-in">
-            <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-1">
-              Your Regulation Report
+        {result?.pre_trigger_alert && (
+          <div className="w-full max-w-md mx-auto mt-6 px-4 py-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-center shadow-lg animate-fade-in-up">
+            <p className="text-indigo-200/90 text-[13px] italic tracking-wide">
+              🌅 {result.pre_trigger_alert}
             </p>
-
-            <ResultRow
-              icon="💜"
-              label="Emotion"
-              value={result.emotion}
-            />
-            <ResultRow
-              icon="🫁"
-              label="Body State"
-              value={result.body_state}
-            />
-            <ResultRow
-              icon="🌿"
-              label="Recommended Action"
-              value={result.action}
-            />
           </div>
         )}
 
-        {/* ── Footer ──────────────────────────────────────────────────────── */}
-        <p className="text-center text-white/20 text-xs pb-2">
+      {/* 4) Results Context Switcher */}
+      {result && (
+        <div className="w-full max-w-md mx-auto mt-6 flex flex-col gap-4">
+          {result.mode === "companion" ? (
+            <CompanionModeView result={result} onReset={() => { setResult(null); setMessage(""); }} />
+          ) : result.mode === "guided" ? (
+            <GuidedModeView result={result} onReset={() => { setResult(null); setMessage(""); }} />
+          ) : (
+            <div className="backdrop-blur-xl bg-[#1e1b4b]/80 border border-indigo-500/30 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 animate-fade-in">
+              <div className="text-center pb-2 border-b border-white/10 mb-2">
+                <h2 className="text-lg font-semibold text-white/90 tracking-wide uppercase text-sm">Your Regulation Report</h2>
+              </div>
+              
+              <ResultRow icon="💜" label="Emotion" value={result.emotion} />
+              {result.body_state && <ResultRow icon="🫁" label="Body State" value={result.body_state} />}
+              {result.action && <ResultRow icon="🌿" label="Recommended Action" value={result.action} />}
+              
+              {result.insight_hint && (
+                <div className="mt-2 text-center text-purple-200/80 italic text-[11px] border-t border-white/10 pt-3">
+                  💡 {result.insight_hint}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+        <InsightsView />
+
+        <p className="text-center text-white/20 text-xs pb-2 mt-4">
           InnerEase AI · Nervous System Regulation
         </p>
       </div>
